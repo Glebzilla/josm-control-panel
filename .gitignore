@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# Ready-made executable (published via GitHub Releases, not in git)
+*.exe
+
+# Editor / OS junk
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
