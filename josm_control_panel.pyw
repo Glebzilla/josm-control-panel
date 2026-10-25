@@ -36,7 +36,6 @@ URL_TEMURIN       = "https://adoptium.net/temurin/releases"
 URL_ADOPTIUM_INFO = "https://api.adoptium.net/v3/info/available_releases"
 URL_ADOPTIUM_LATEST = ("https://api.adoptium.net/v3/assets/latest/{feature}"
                        "/hotspot?architecture=x64&image_type=jdk&os=windows")
-URL_AUTHOR      = "https://github.com/Glebzilla"
 URL_PROJECT     = "https://github.com/Glebzilla/josm-control-panel"
 
 HOME        = os.path.expanduser("~")
@@ -513,13 +512,12 @@ class App(tk.Tk):
         # --- Нижняя панель (закреплена за низом окна) ---
         bottom = tk.Frame(self, bg=BG)
         bottom.pack(side="bottom", fill="x", padx=22, pady=(2, 14))
-        credit = tk.Label(bottom, text="Сгенерировано ИИ · github.com/Glebzilla",
+        credit = tk.Label(bottom,
+                          text="Сгенерировано ИИ · github.com/Glebzilla/josm-control-panel",
                           bg=BG, fg=SUBTEXT, font=(FONT, 8, "underline"),
                           cursor="hand2")
         credit.pack(side="left")
-        credit.bind("<Button-1>", lambda e: webbrowser.open(URL_AUTHOR))
-        tk.Label(bottom, text="· Ctrl+Q — выход", bg=BG, fg=SUBTEXT,
-                 font=(FONT, 8)).pack(side="left", padx=(6, 0))
+        credit.bind("<Button-1>", lambda e: webbrowser.open(URL_PROJECT))
         FlatButton(bottom, "Закрыть", self.close_app, RED,
                    icon="✕", font_size=9).pack(side="right")
 
@@ -528,14 +526,8 @@ class App(tk.Tk):
         header.pack(fill="x", padx=22, pady=(10, 4))
         tk.Label(header, text="Панель управления", bg=BG, fg=TEXT,
                  font=(FONT, 16, "bold")).pack(anchor="w")
-        sub = tk.Frame(header, bg=BG)
-        sub.pack(anchor="w", pady=(2, 0))
-        tk.Label(sub, text="JOSM · Nginx · Java", bg=BG, fg=SUBTEXT,
-                 font=(FONT, 10)).pack(side="left")
-        repo = tk.Label(sub, text="· исходник на GitHub", bg=BG, fg=BLUE,
-                        font=(FONT, 9, "underline"), cursor="hand2")
-        repo.pack(side="left", padx=(6, 0))
-        repo.bind("<Button-1>", lambda e: webbrowser.open(URL_PROJECT))
+        tk.Label(header, text="JOSM · Nginx · Java", bg=BG, fg=SUBTEXT,
+                 font=(FONT, 10)).pack(anchor="w", pady=(2, 0))
 
         # --- JOSM ---
         card = tk.Frame(self, bg=CARD, highlightbackground=BORDER,
