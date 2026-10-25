@@ -17,13 +17,25 @@ Nginx-прокси на порту **8081**. Панель:
 - запускает и останавливает Nginx;
 - проверяет **Java (Temurin)**, сравнивает с актуальной версией и при
   необходимости ставит обновление;
-- проверяет **плагины JOSM** и ставит недостающие:
-  - **Russia Address Helper** — адреса из ЕГРН, нужен для НСПД / ПКК;
-  - **UtilsPlugin2** — обязательные утилиты (без него не работает Address Helper);
-  - **FilletTools** — скругление углов и сглаживание линий.
+- проверяет **плагины JOSM** и при необходимости ставит их:
+  - **Russia Address Helper** — загрузка адресов из ЕГРН; нужен для работы
+    с НСПД / ПКК;
+  - **UtilsPlugin2** — набор утилит для редактирования;
+  - **FilletTools** — скругление углов и фаски.
 
-Без плагина Address Helper Nginx-прокси сам по себе не нужен — они
-нужны вместе.
+Обязателен только Address Helper: без него локальный Nginx-прокси на 8081
+не нужен. Остальные два — по желанию, панель просто помогает их поставить.
+
+## Плагины и их источники
+
+| Плагин | Источник | Что делает |
+|---|---|---|
+| Russia Address Helper | [github.com/micronull/JOSM-Russia-address-helper-plugin](https://github.com/micronull/JOSM-Russia-address-helper-plugin) | адреса из ЕГРН, работа с НСПД / ПКК |
+| UtilsPlugin2 | [josm.openstreetmap.de · UtilsPlugin2](https://josm.openstreetmap.de/wiki/Help/Plugin/UtilsPlugin2) | копирование, выравнивание, замена геометрии |
+| FilletTools | [gitlab.com/darkonus/josm-fillet-tools](https://gitlab.com/darkonus/josm-fillet-tools) | скругление углов (fillet) и фаски |
+
+Панель скачивает jar-файлы из этих источников в `%APPDATA%\JOSM\plugins`.
+Ссылки в окне «Плагины JOSM» кликабельны.
 
 ## Быстрый старт
 

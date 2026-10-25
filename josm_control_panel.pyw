@@ -37,6 +37,7 @@ URL_ADOPTIUM_INFO = "https://api.adoptium.net/v3/info/available_releases"
 URL_ADOPTIUM_LATEST = ("https://api.adoptium.net/v3/assets/latest/{feature}"
                        "/hotspot?architecture=x64&image_type=jdk&os=windows")
 URL_AUTHOR      = "https://github.com/Glebzilla"
+URL_PROJECT     = "https://github.com/Glebzilla/josm-control-panel"
 
 HOME        = os.path.expanduser("~")
 DOWNLOADS   = os.path.join(HOME, "Downloads")
@@ -53,20 +54,26 @@ JOSM_PLUGINS = [
         "note": "адреса из ЕГРН — нужен для работы с НСПД / ПКК",
         "url": ("https://github.com/micronull/JOSM-Russia-address-helper-"
                 "plugin/releases/latest/download/russia-address-helper.jar"),
+        "site": "https://github.com/micronull/JOSM-Russia-address-helper-plugin",
+        "site_label": "github.com/micronull/JOSM-Russia-address-helper-plugin",
     },
     {
         "file": "utilsplugin2.jar",
         "name": "UtilsPlugin2",
-        "note": "обязательные утилиты; без него не работает Address Helper",
+        "note": "набор утилит: копирование, выравнивание, замена геометрии",
         "url": ("https://josm.openstreetmap.de/osmsvn/applications/editors/"
                 "josm/dist/utilsplugin2.jar"),
+        "site": "https://josm.openstreetmap.de/wiki/Help/Plugin/UtilsPlugin2",
+        "site_label": "josm.openstreetmap.de · UtilsPlugin2",
     },
     {
         "file": "FilletTools.jar",
         "name": "FilletTools",
-        "note": "скругление углов и сглаживание линий",
+        "note": "скругление углов и фаски",
         "url": ("https://gitlab.com/darkonus/josm-fillet-tools/-/releases/"
                 "permalink/latest/downloads/FilletTools.jar"),
+        "site": "https://gitlab.com/darkonus/josm-fillet-tools",
+        "site_label": "gitlab.com/darkonus/josm-fillet-tools",
     },
 ]
 
@@ -521,8 +528,14 @@ class App(tk.Tk):
         header.pack(fill="x", padx=22, pady=(10, 4))
         tk.Label(header, text="Панель управления", bg=BG, fg=TEXT,
                  font=(FONT, 16, "bold")).pack(anchor="w")
-        tk.Label(header, text="JOSM · Nginx · Java", bg=BG, fg=SUBTEXT,
-                 font=(FONT, 10)).pack(anchor="w", pady=(2, 0))
+        sub = tk.Frame(header, bg=BG)
+        sub.pack(anchor="w", pady=(2, 0))
+        tk.Label(sub, text="JOSM · Nginx · Java", bg=BG, fg=SUBTEXT,
+                 font=(FONT, 10)).pack(side="left")
+        repo = tk.Label(sub, text="· исходник на GitHub", bg=BG, fg=BLUE,
+                        font=(FONT, 9, "underline"), cursor="hand2")
+        repo.pack(side="left", padx=(6, 0))
+        repo.bind("<Button-1>", lambda e: webbrowser.open(URL_PROJECT))
 
         # --- JOSM ---
         card = tk.Frame(self, bg=CARD, highlightbackground=BORDER,
@@ -733,19 +746,17 @@ class App(tk.Tk):
 
     # ---------- Плагины JOSM ----------
     def check_plugins(self):
-        """Проверяет наличие нужных плагинов в профиле JOSM."""
+        """Проверяет наличие плагинов, которые умеет ставить панель."""
         self.plugins_state = scan_josm_plugins()
         missing = [p for p in self.plugins_state if not p["installed"]]
-        total = len(self.plugins_state)
         if self.plugins_link is None:
             return
         if missing:
             self.plugins_link.config(
-                text=f"Плагины: {total - len(missing)} из {total} · "
-                     "нажмите, чтобы установить", fg=YELLOW)
+                text=f"Плагины JOSM: не хватает {len(missing)} · установить",
+                fg=YELLOW)
         else:
-            self.plugins_link.config(
-                text=f"Плагины: все {total} установлены", fg=GREEN)
+            self.plugins_link.config(text="Плагины JOSM", fg=SUBTEXT)
 
     def show_plugins_dialog(self):
         self.check_plugins()
@@ -760,15 +771,15 @@ class App(tk.Tk):
         win.configure(bg=BG)
         win.resizable(False, False)
         win.transient(self)
-        win.geometry("520x430")
+        win.geometry("520x500")
         self._plugins_dlg = win
 
         tk.Label(win, text="Плагины JOSM", bg=BG, fg=TEXT,
                  font=(FONT, 14, "bold")).pack(anchor="w", padx=22,
                                                pady=(20, 2))
-        tk.Label(win, text="Нужны для работы с НСПД / ПКК. "
-                           "Ставятся в профиль JOSM.",
-                 bg=BG, fg=SUBTEXT,
+        tk.Label(win, text="Ставятся в профиль JOSM. Для НСПД / ПКК нужен "
+                           "Address Helper, остальные — по желанию.",
+                 bg=BG, fg=SUBTEXT, wraplength=476, justify="left",
                  font=(FONT, 9)).pack(anchor="w", padx=22)
 
         box = tk.Frame(win, bg=CARD, highlightbackground=BORDER,
@@ -793,6 +804,12 @@ class App(tk.Tk):
             tk.Label(row, text=p["note"], bg=CARD, fg=SUBTEXT,
                      font=(FONT, 9), wraplength=440,
                      justify="left").pack(anchor="w", padx=(18, 0))
+            src = tk.Label(row, text=f"↗ {p['site_label']}", bg=CARD,
+                           fg=BLUE, font=(FONT, 8, "underline"),
+                           cursor="hand2")
+            src.pack(anchor="w", padx=(18, 0))
+            src.bind("<Button-1>",
+                     lambda e, u=p["site"]: webbrowser.open(u))
 
         self._plugins_msg = tk.Label(
             win, text=f"Папка: {JOSM_PLUGINS_DIR}", bg=BG, fg=SUBTEXT,
@@ -812,6 +829,11 @@ class App(tk.Tk):
         FlatButton(win, "Закрыть", win.destroy, RED,
                    icon="✕", font_size=9).pack(fill="x", padx=22,
                                                pady=(0, 18))
+
+        # Высоту подгоняем под содержимое и под экран
+        win.update_idletasks()
+        h = min(win.winfo_reqheight(), self.winfo_screenheight() - 80)
+        win.geometry(f"520x{h}")
 
     def _plugin_dialog_update(self, text, color=SUBTEXT):
         dlg = self._plugins_dlg
