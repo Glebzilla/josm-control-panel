@@ -23,7 +23,7 @@ if errorlevel 1 (
 echo Building JOSM_Control_Panel.exe ...
 python -m PyInstaller --noconfirm --onefile --noconsole ^
     --name JOSM_Control_Panel ^
-    --icon josm_control_panel.ico ^
+    --icon "%~dp0josm_control_panel.ico" ^
     --distpath dist --workpath build --specpath build ^
     josm_control_panel.pyw
 
