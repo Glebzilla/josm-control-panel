@@ -3,8 +3,9 @@
 [Русская версия](README.md)
 
 A small Windows control panel for **JOSM** and a local **Nginx** proxy used
-with **NSPD / PKK** — Russia's state urban-planning and cadastral portal.
-It also keeps **Java** and the required **JOSM plugins** in order.
+with **NSPD / PKK** — Russia's National Spatial Data System and Public
+Cadastral Map. It also keeps **Java** and the required **JOSM plugins** in
+order.
 
 > The interface is in Russian. NSPD / PKK is a Russian service, so the panel
 > is intended primarily for Russian-speaking users. This English README is
@@ -26,8 +27,8 @@ It also keeps **Java** and the required **JOSM plugins** in order.
   is updated automatically.
 - Checks **JOSM plugins** and installs the missing ones into
   `%APPDATA%\JOSM\plugins`:
-  - **Russia Address Helper** — addresses from the Russian cadastre; required
-    for the NSPD / PKK workflow;
+  - **Russia Address Helper** — addresses from the Russian real-estate
+    register (EGRN); required for the NSPD / PKK workflow;
   - **UtilsPlugin2** — editing utilities (optional);
   - **FilletTools** — fillet and chamfer tools (optional).
 
