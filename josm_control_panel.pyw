@@ -38,6 +38,60 @@ URL_ADOPTIUM_LATEST = ("https://api.adoptium.net/v3/assets/latest/{feature}"
                        "/hotspot?architecture=x64&image_type=jdk&os=windows")
 URL_PROJECT     = "https://github.com/Glebzilla/josm-control-panel"
 
+# Альтернативные сборки JDK — только ссылки, без автоустановки.
+# Панель ставит и обновляет только Temurin: у него есть API с готовым MSI,
+# у остальных вендоров стабильного «latest MSI» нет.
+JAVA_BUILDS = [
+    {
+        "vendor": "Temurin",
+        "name": "Eclipse Temurin",
+        "note": "сборка Adoptium — её ставит панель",
+        "oss": True,
+        "url": URL_TEMURIN,
+        "site": "adoptium.net/temurin/releases",
+    },
+    {
+        "vendor": "Microsoft",
+        "name": "Microsoft Build of OpenJDK",
+        "note": "бесплатная сборка Microsoft",
+        "oss": True,
+        "url": "https://learn.microsoft.com/java/openjdk/download",
+        "site": "learn.microsoft.com/java/openjdk/download",
+    },
+    {
+        "vendor": "Corretto",
+        "name": "Amazon Corretto",
+        "note": "бесплатная сборка Amazon",
+        "oss": True,
+        "url": "https://aws.amazon.com/corretto/",
+        "site": "aws.amazon.com/corretto",
+    },
+    {
+        "vendor": "Zulu",
+        "name": "Azul Zulu",
+        "note": "сборка Azul",
+        "oss": True,
+        "url": "https://www.azul.com/downloads/?package=jdk",
+        "site": "azul.com/downloads",
+    },
+    {
+        "vendor": "Liberica",
+        "name": "BellSoft Liberica",
+        "note": "сборка BellSoft",
+        "oss": True,
+        "url": "https://bell-sw.com/pages/downloads/",
+        "site": "bell-sw.com/pages/downloads",
+    },
+    {
+        "vendor": "Oracle",
+        "name": "Oracle JDK",
+        "note": "проприетарная; прописывает свой java в PATH",
+        "oss": False,
+        "url": "https://www.oracle.com/java/technologies/downloads/",
+        "site": "oracle.com/java/technologies/downloads",
+    },
+]
+
 HOME        = os.path.expanduser("~")
 DOWNLOADS   = os.path.join(HOME, "Downloads")
 JOSM_DEST   = os.path.join(DOWNLOADS, "josm-latest.jar")
@@ -143,6 +197,59 @@ def parse_java_version(text):
         if upd:
             v += "." + upd
     return v
+
+
+# Порядок важен: Temurin тоже пишет «OpenJDK», а Oracle — «Java(TM)».
+JAVA_VENDOR_MARKERS = [
+    ("Temurin", ("temurin", "adoptium")),
+    ("Microsoft", ("microsoft",)),
+    ("Corretto", ("corretto",)),
+    ("Zulu", ("zulu",)),
+    ("Liberica", ("liberica", "bellsoft")),
+    ("GraalVM", ("graalvm",)),
+    ("Semeru", ("semeru",)),
+    ("Oracle", ("oracle", "java(tm) se")),
+]
+
+
+def detect_java_vendor(text="", path=""):
+    """Вендор JDK по выводу `java -version` или по пути установки.
+
+    Возвращает короткое имя (Temurin, Microsoft, Corretto, …) или "".
+    """
+    hay = f"{text}\n{path}".lower()
+    for vendor, markers in JAVA_VENDOR_MARKERS:
+        if any(m in hay for m in markers):
+            return vendor
+    return ""
+
+
+def java_home_from_exe(exe):
+    """Путь JDK по java.exe. Для шимов (javapath) — папка с exe."""
+    if not exe:
+        return ""
+    bin_dir = os.path.dirname(exe)
+    if os.path.basename(bin_dir).lower() == "bin":
+        return os.path.dirname(bin_dir)
+    return bin_dir
+
+
+def shorten_path(path, limit=56):
+    """Сокращает длинный путь в середине, чтобы строка влезла в карточку."""
+    if not path or len(path) <= limit:
+        return path
+    head = limit // 2 - 1
+    tail = limit - head - 1
+    return f"{path[:head]}…{path[-tail:]}"
+
+
+def resolve_java_exe():
+    """java.exe, которым панель запускает JOSM: PATH, затем стандартные папки."""
+    exe = shutil.which("java")
+    if exe and os.path.exists(exe):
+        return exe
+    exe, _ = find_java_install()
+    return exe
 
 
 def get_nginx_versions(timeout=6):
@@ -500,6 +607,9 @@ class App(tk.Tk):
         # Java
         self.java_version = None
         self.java_latest = None
+        self.java_exe = None
+        self.java_vendor = ""
+        self._java_dlg = None
 
         # Плагины JOSM
         self.plugins_state = []
@@ -625,7 +735,7 @@ class App(tk.Tk):
         tk.Label(inner, text="Java", bg=CARD, fg=TEXT,
                  font=(FONT, 11, "bold")).pack(anchor="w")
 
-        row = tk.Frame(inner, bg=CARD); row.pack(anchor="w", pady=(4, 8))
+        row = tk.Frame(inner, bg=CARD); row.pack(anchor="w", pady=(4, 2))
         self.java_dot = tk.Label(row, text="●", bg=CARD, fg=YELLOW,
                                  font=(FONT, 10))
         self.java_dot.pack(side="left")
@@ -634,11 +744,15 @@ class App(tk.Tk):
                                     wraplength=420, justify="left")
         self.java_status.pack(side="left", padx=(6, 0))
 
-        link = tk.Label(inner, text="Скачать Temurin (OpenJDK) ↗",
-                        bg=CARD, fg=BLUE, font=(FONT, 9, "underline"),
-                        cursor="hand2")
-        link.pack(anchor="w")
-        link.bind("<Button-1>", lambda e: webbrowser.open(URL_TEMURIN))
+        meta = tk.Frame(inner, bg=CARD)
+        meta.pack(fill="x")
+        link = tk.Label(meta, text="другие сборки ↗", bg=CARD, fg=BLUE,
+                        font=(FONT, 9, "underline"), cursor="hand2")
+        link.pack(side="right", padx=(8, 0))
+        link.bind("<Button-1>", lambda e: self.show_java_dialog())
+        self.java_path = tk.Label(meta, text="поиск...", bg=CARD, fg=SUBTEXT,
+                                  font=(FONT, 8), anchor="w")
+        self.java_path.pack(side="left", fill="x", expand=True)
 
         self.btn_java_update = FlatButton(inner, "Проверка...",
                                           self.update_java, BLUE, icon="⟳")
@@ -970,22 +1084,31 @@ class App(tk.Tk):
                 f"Файл не существует:\n{JOSM_DEST}\n\n"
                 "Нажмите «Скачать», чтобы загрузить его.")
             return
+
+        # Запускаем именно тем java.exe, который нашла и показала панель.
+        exe = self.java_exe
+        if not exe or not os.path.exists(exe):
+            exe = resolve_java_exe()
+            self.java_exe = exe
+        if not exe:
+            self._set_status(self.josm_status, self.josm_dot,
+                             "Java не найдена", RED)
+            messagebox.showerror(
+                "Java не найдена",
+                "Не удалось найти java.exe.\n\n"
+                "Поставьте Java кнопкой в карточке Java — панель "
+                "установит Temurin.")
+            return
         try:
             flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
-            subprocess.Popen(["java", "-jar", JOSM_DEST],
+            subprocess.Popen([exe, "-jar", JOSM_DEST],
                              creationflags=flags, close_fds=True)
             self._set_status(self.josm_status, self.josm_dot,
                              "JOSM запускается...", GREEN)
-        except FileNotFoundError:
-            self._set_status(self.josm_status, self.josm_dot,
-                             "Java не найдена в PATH", RED)
-            messagebox.showerror(
-                "Java не найдена",
-                "Не удалось запустить java.\n\n"
-                "Установите Java (Temurin) и добавьте её в PATH.")
         except Exception as e:
             self._set_status(self.josm_status, self.josm_dot,
                              f"Ошибка: {e}", RED)
+            messagebox.showerror("JOSM", f"Не удалось запустить JOSM:\n{e}")
 
     # =================================================
     #  Nginx
@@ -1249,6 +1372,78 @@ class App(tk.Tk):
     # =================================================
     #  Java
     # =================================================
+    def show_java_dialog(self):
+        dlg = self._java_dlg
+        if dlg is not None and dlg.winfo_exists():
+            dlg.lift()
+            dlg.focus_force()
+            return
+
+        win = tk.Toplevel(self)
+        win.title("Другие сборки Java")
+        win.configure(bg=BG)
+        win.resizable(False, False)
+        win.transient(self)
+        win.geometry("520x520")
+        self._java_dlg = win
+
+        tk.Label(win, text="Другие сборки Java", bg=BG, fg=TEXT,
+                 font=(FONT, 14, "bold")).pack(anchor="w", padx=22,
+                                               pady=(16, 2))
+        tk.Label(win, text="JOSM работает с любой JDK 17+. Панель обновляет "
+                           "только Temurin. Все сборки, кроме Oracle JDK, "
+                           "открытые (GPLv2+CE).",
+                 bg=BG, fg=SUBTEXT, wraplength=476, justify="left",
+                 font=(FONT, 9)).pack(anchor="w", padx=22)
+
+        box = tk.Frame(win, bg=CARD, highlightbackground=BORDER,
+                       highlightthickness=1)
+        box.pack(fill="x", padx=22, pady=10)
+        inner = tk.Frame(box, bg=CARD)
+        inner.pack(fill="x", padx=16, pady=12)
+
+        # Если окно открыли во время автопроверки — определяем на месте.
+        exe = self.java_exe or resolve_java_exe()
+        vendor = self.java_vendor or detect_java_vendor("", exe or "")
+
+        for build in JAVA_BUILDS:
+            row = tk.Frame(inner, bg=CARD)
+            row.pack(fill="x", pady=(0, 6))
+            head = tk.Frame(row, bg=CARD)
+            head.pack(fill="x")
+            tk.Label(head, text=build["name"], bg=CARD, fg=TEXT,
+                     font=(FONT, 10, "bold")).pack(side="left")
+            tk.Label(head, text=("open source" if build.get("oss")
+                                 else "проприетарная"),
+                     bg=CARD, fg=GREEN if build.get("oss") else YELLOW,
+                     font=(FONT, 8)).pack(side="left", padx=(8, 0))
+            if vendor == build["vendor"]:
+                tk.Label(head, text="✓ используется", bg=CARD, fg=BLUE,
+                         font=(FONT, 8)).pack(side="right")
+            tk.Label(row, text=build["note"], bg=CARD, fg=SUBTEXT,
+                     font=(FONT, 9), wraplength=440,
+                     justify="left").pack(anchor="w", padx=(18, 0))
+            src = tk.Label(row, text=f"↗ {build['site']}", bg=CARD,
+                           fg=BLUE, font=(FONT, 8, "underline"),
+                           cursor="hand2")
+            src.pack(anchor="w", padx=(18, 0))
+            src.bind("<Button-1>",
+                     lambda e, u=build["url"]: webbrowser.open(u))
+
+        path = java_home_from_exe(exe) if exe else ""
+        tk.Label(win, text=(f"Сейчас используется: {path}" if path
+                            else "Java не найдена"),
+                 bg=BG, fg=SUBTEXT, font=(FONT, 8),
+                 wraplength=460, justify="left").pack(anchor="w", padx=22)
+
+        FlatButton(win, "Закрыть", win.destroy, RED, icon="✕",
+                   font_size=9).pack(fill="x", padx=22, pady=(10, 14))
+
+        # Высоту подгоняем под содержимое и под экран
+        win.update_idletasks()
+        h = min(win.winfo_reqheight(), self.winfo_screenheight() - 80)
+        win.geometry(f"520x{h}")
+
     def check_java(self):
         self._set_status(self.java_status, self.java_dot,
                          "Проверка...", SUBTEXT)
@@ -1257,78 +1452,90 @@ class App(tk.Tk):
                          daemon=True).start()
 
     def _check_java_worker(self):
-        installed = None
-        raw = ""
-        try:
-            r = subprocess.run(["java", "-version"],
-                               capture_output=True, text=True, timeout=10)
-            raw = (r.stderr or "") + (r.stdout or "")
-            installed = parse_java_version(raw)
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            raw = str(e)
+        # PATH и стандартные папки: берём самую свежую из найденных,
+        # чтобы JOSM не достался старый java из PATH.
+        candidates = []
+        for exe in (shutil.which("java"), find_java_install()[0]):
+            if not exe or not os.path.exists(exe):
+                continue
+            key = os.path.normcase(os.path.abspath(exe))
+            if all(key != os.path.normcase(os.path.abspath(c))
+                   for c in candidates):
+                candidates.append(exe)
 
-        exe = None
-        if not installed:
-            exe, _dir_ver = find_java_install()
-            if exe:
-                try:
-                    r = subprocess.run([exe, "-version"],
-                                       capture_output=True, text=True,
-                                       timeout=15)
-                    installed = parse_java_version(
-                        (r.stderr or "") + (r.stdout or ""))
-                except Exception:
-                    installed = None
+        best = None
+        errors = []
+        for order, exe in enumerate(candidates):
+            try:
+                r = subprocess.run([exe, "-version"],
+                                   capture_output=True, text=True,
+                                   timeout=15)
+                raw = (r.stderr or "") + (r.stdout or "")
+                ver = parse_java_version(raw)
+                if not ver:
+                    errors.append(f"{os.path.basename(exe)}: версия "
+                                  f"не распознана")
+                    continue
+                cand = (parse_ver(ver), -order, exe, ver,
+                        detect_java_vendor(raw, exe), raw)
+                if best is None or cand[:2] > best[:2]:
+                    best = cand
+            except Exception as e:
+                errors.append(str(e))
+
+        installed = best[3] if best else None
+        exe = best[2] if best else None
+        vendor = best[4] if best else ""
+        raw = best[5] if best else ""
 
         latest = None
-        error = None
-        if installed:
-            try:
-                latest = get_latest_java(installed)
-            except Exception as e:
-                error = str(e)
-        result = (installed, latest, raw.strip(), exe, error)
+        error = "; ".join(errors) if errors else None
+        try:
+            latest = get_latest_java(installed)
+        except Exception as e:
+            error = str(e)
+        result = (installed, latest, raw.strip(), exe, error, vendor)
         self.after(0, self._on_java_check_done, result)
 
     def _on_java_check_done(self, result):
-        installed, latest, raw, exe, error = result
+        installed, latest, raw, exe, error, vendor = result
         self.java_latest = latest
+        self.java_exe = exe
+        self.java_vendor = vendor or ""
+        self.java_version = installed
 
         if not installed:
+            self.java_path.config(text="java.exe не найден")
             self.btn_java_update.set_state(True)
             if latest:
                 self._set_status(self.java_status, self.java_dot,
-                                 f"Java не найдена в PATH. Доступна "
-                                 f"{latest['version']} "
-                                 f"(LTS {latest['feature']})", RED)
+                                 f"Java не найдена · доступна "
+                                 f"{latest['version']}", RED)
                 self.btn_java_update.set_text(
                     f"Установить {latest['version']}")
             else:
                 self._set_status(self.java_status, self.java_dot,
-                                 "Java не найдена в PATH. Установите "
-                                 "Temurin по ссылке ниже.", RED)
+                                 "Java не найдена — установите Temurin", RED)
                 self.btn_java_update.set_text("Установить")
             return
 
+        self.java_path.config(text=shorten_path(java_home_from_exe(exe)))
+        vendor_tag = f" · {vendor}" if vendor else ""
         lts_tag = " LTS" if latest and latest.get("lts") else ""
         if latest and parse_ver(latest["version"]) > parse_ver(installed):
             self._set_status(self.java_status, self.java_dot,
-                             f"Установлена {installed}. Доступно "
-                             f"обновление до {latest['version']}{lts_tag}",
-                             YELLOW)
+                             f"Java {installed}{lts_tag}{vendor_tag} · "
+                             f"обновление до {latest['version']}", YELLOW)
             self.btn_java_update.set_text(f"Обновить до {latest['version']}")
         elif latest:
             self._set_status(self.java_status, self.java_dot,
-                             f"Java {installed}{lts_tag}. Версия актуальная",
-                             GREEN)
+                             f"Java {installed}{lts_tag}{vendor_tag} · "
+                             f"актуальная", GREEN)
             self.btn_java_update.set_text("Переустановить")
         else:
             self._set_status(self.java_status, self.java_dot,
-                             f"Java {installed}. Не удалось проверить "
-                             f"актуальную версию" +
-                             (f": {error}" if error else ""), YELLOW)
+                             f"Java {installed}{lts_tag}{vendor_tag} · "
+                             f"версия не проверена", YELLOW)
             self.btn_java_update.set_text("Переустановить")
         self.btn_java_update.set_state(True)
 
