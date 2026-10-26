@@ -1,5 +1,7 @@
 # JOSM & Nginx Control Panel
 
+[English version](README.en.md)
+
 Небольшая панель для Windows, которая держит в порядке рабочий набор для
 **НСПД / ПКК**: JOSM, локальный Nginx-прокси на `nspd.gov.ru` (порт 8081),
 Java и плагины JOSM.
@@ -137,6 +139,7 @@ josm_control_panel.pyw   — исходник панели
 josm_control_panel.ico   — иконка
 build.bat                — сборка exe (PyInstaller)
 requirements.txt         — зависимости для сборки
+README.en.md             — краткое описание на английском
 docs/screenshot.png      — скриншот
 docs/java-builds.png     — скриншот окна «Другие сборки Java»
 ```
